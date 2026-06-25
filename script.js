@@ -1,14 +1,21 @@
 const mesAtual = getMesAtual();
 
+/* --- Configuração e estado --- */
+
+const HISTORY_KEY = 'metasdiarias-history';
+const MAX_HISTORY = 5;
+
 const answers = {
   metaMensal: null,
   diasTrabalho: null,
   diasJaTrabalhados: null,
   lucroJaObtido: null,
+  folgasParaTrabalhar: null,
 };
 
 let currentStepIndex = 0;
 let steps = [];
+let historyOpen = false;
 
 const dom = {
   monthInfo: document.getElementById('month-info'),
@@ -17,11 +24,9 @@ const dom = {
   btnBack: document.getElementById('btn-back'),
   btnNext: document.getElementById('btn-next'),
   btnRestart: document.getElementById('btn-restart'),
-  progressWrap: document.getElementById('progress-wrap'),
   progressFill: document.getElementById('progress-fill'),
   progressText: document.getElementById('progress-text'),
   questionsPanel: document.getElementById('questions-panel'),
-  wizardCard: document.getElementById('wizard-card'),
   resultsCard: document.getElementById('results-card'),
   headerSubtitle: document.getElementById('header-subtitle'),
   resposta1Valor: document.getElementById('resposta-1-valor'),
@@ -29,7 +34,20 @@ const dom = {
   respostaAlerta: document.getElementById('resposta-alerta'),
   respostaAlertaTexto: document.getElementById('resposta-alerta-texto'),
   resposta3Valor: document.getElementById('resposta-3-valor'),
+  resposta3Texto: document.getElementById('resposta-3-texto'),
+  resposta3Wrap: document.getElementById('resposta-3-wrap'),
+  respostaFolgas: document.getElementById('resposta-folgas'),
+  folgasParaTrabalharInput: document.getElementById('folgas-para-trabalhar-input'),
+  folgasTrabalhoHint: document.getElementById('folgas-trabalho-hint'),
+  folgasTrabalhoError: document.getElementById('folgas-trabalho-error'),
+  btnCalcularFolgas: document.getElementById('btn-calcular-folgas'),
+  historyCard: document.getElementById('history-card'),
+  historyList: document.getElementById('history-list'),
+  btnClearHistory: document.getElementById('btn-clear-history'),
+  btnVerHistorico: document.getElementById('btn-ver-historico'),
 };
+
+/* --- Calendário e formatação --- */
 
 function getMesAtual() {
   const hoje = new Date();
@@ -88,6 +106,8 @@ function buildFolgasPreview(diasTrabalho) {
   return `📌 Você planejou <strong>${formatDias(diasTrabalho)}</strong> em um mês de <strong>${mesAtual.diasNoMes}</strong> — <strong>${formatDias(extras)}</strong> a mais do que o calendário tem.`;
 }
 
+/* --- Folgas: análise e regras --- */
+
 function analyzeFolgas(diasTrabalho, diasJaTrabalhados) {
   const folgasPlanejadas = getFolgasPlanejadas(diasTrabalho);
   const folgasPlanejadasPositivas = Math.max(0, folgasPlanejadas);
@@ -121,12 +141,53 @@ function analyzeFolgas(diasTrabalho, diasJaTrabalhados) {
   };
 }
 
+function podeUsarFolgasParaTrabalhar(diasTrabalho, diasJaTrabalhados) {
+  const diasRestantesNoPlano = Math.max(0, diasTrabalho - diasJaTrabalhados);
+  const diasRestantesNoCalendario = Math.max(0, mesAtual.diasNoMes - mesAtual.diaHoje);
+  const folgas = analyzeFolgas(diasTrabalho, diasJaTrabalhados);
+
+  return (
+    diasRestantesNoPlano === 0 &&
+    folgas.folgasRestantesNoPlano > 0 &&
+    diasRestantesNoCalendario > 0
+  );
+}
+
+function getMaxFolgasParaTrabalhar(diasTrabalho, diasJaTrabalhados) {
+  if (!podeUsarFolgasParaTrabalhar(diasTrabalho, diasJaTrabalhados)) {
+    return 0;
+  }
+
+  const folgas = analyzeFolgas(diasTrabalho, diasJaTrabalhados);
+  const diasRestantesNoCalendario = Math.max(0, mesAtual.diasNoMes - mesAtual.diaHoje);
+
+  return Math.min(folgas.folgasRestantesNoPlano, diasRestantesNoCalendario);
+}
+
+function shouldAskFolgasParaTrabalhar() {
+  const { metaMensal, diasTrabalho, diasJaTrabalhados, lucroJaObtido } = answers;
+  if (
+    metaMensal == null ||
+    diasTrabalho == null ||
+    diasJaTrabalhados == null ||
+    lucroJaObtido == null
+  ) {
+    return false;
+  }
+
+  const faltaGanhar = Math.max(0, metaMensal - lucroJaObtido);
+  if (faltaGanhar <= 0) return false;
+
+  return podeUsarFolgasParaTrabalhar(diasTrabalho, diasJaTrabalhados);
+}
+
+/* --- Wizard: perguntas 1 a 4 --- */
+
 function buildSteps() {
   return [
     {
       id: 'metaMensal',
-      question: 'Qual o valor você precisa ganhar esse mês?',
-      hint: `Sua meta de ganho para ${mesAtual.nome.toLowerCase()}. Este mês tem ${mesAtual.diasNoMes} dias.`,
+      title: 'Valor total da meta:',
       type: 'currency',
       placeholder: '5.000,00',
       startEmpty: true,
@@ -298,8 +359,8 @@ function renderInputStep(step) {
   return `
     <div class="step-enter">
       <span class="step-number">Pergunta ${currentStepIndex + 1}</span>
-      <h2 class="step-question">${step.question}</h2>
-      <p class="step-hint">${step.hint}</p>
+      ${step.title ? `<h2 class="step-title">${step.title}</h2>` : `<h2 class="step-question">${step.question}</h2>`}
+      ${step.hint ? `<p class="step-hint">${step.hint}</p>` : ''}
       ${inputHtml}
       ${folgasPreview}
     </div>
@@ -370,52 +431,10 @@ function renderStep() {
   if (input) input.focus();
 }
 
-function formatFolga(qtd) {
-  return `${qtd} folga${qtd !== 1 ? 's' : ''}`;
-}
+/* --- Cálculo principal --- */
 
-function buildMensagemDias(result) {
-  const diasRestantes = result.diasRestantesCalendario;
-  const folgasRestantes = result.folgas.folgasRestantesNoPlano;
-
-  if (folgasRestantes <= 0) {
-    return `Restam <strong>${formatDias(diasRestantes)}</strong> de trabalho sem folgas.`;
-  }
-
-  const disponivel = folgasRestantes === 1 ? 'disponível' : 'disponíveis';
-  return `Restam <strong>${formatDias(diasRestantes)}</strong>, <strong>${formatFolga(folgasRestantes)}</strong> ${disponivel}.`;
-}
-
-function buildAlertaAmarelo(result) {
-  const { folgas, planoNaoCabeNoMes, diasAbaixoDoPlano, totalTrabalhoProjetado, diasTrabalho } = result;
-  const alertas = [];
-
-  if (folgas.situacao === 'dados_inconsistentes') {
-    alertas.push('Os dias já trabalhados não podem ser maiores que o dia de hoje no calendário.');
-  }
-
-  if (folgas.situacao === 'folgou_sem_direito') {
-    alertas.push(`Você folgou <strong>${formatDias(folgas.folgasUsadas)}</strong> a mais do que seu plano permite.`);
-  }
-
-  if (folgas.situacao === 'folgou_alem_do_plano') {
-    alertas.push(`Você folgou <strong>${formatDias(folgas.folgasExcedentes)}</strong> a mais do que seu plano permite.`);
-  }
-
-  if (planoNaoCabeNoMes) {
-    alertas.push(`
-      Mesmo trabalhando todos os dias restantes, você fará
-      <strong>${formatDias(totalTrabalhoProjetado)}</strong> —
-      <strong>${formatDias(diasAbaixoDoPlano)} a menos</strong> do que os
-      <strong>${diasTrabalho}</strong> planejados.
-    `.replace(/\s+/g, ' ').trim());
-  }
-
-  return alertas;
-}
-
-function calculate() {
-  const { metaMensal, diasTrabalho, diasJaTrabalhados, lucroJaObtido } = answers;
+function calculate(fromAnswers = answers) {
+  const { metaMensal, diasTrabalho, diasJaTrabalhados, lucroJaObtido } = fromAnswers;
 
   const folgas = analyzeFolgas(diasTrabalho, diasJaTrabalhados);
   const faltaGanhar = Math.max(0, metaMensal - lucroJaObtido);
@@ -423,7 +442,12 @@ function calculate() {
 
   const diasRestantesNoPlano = Math.max(0, diasTrabalho - diasJaTrabalhados);
   const diasRestantesNoCalendario = Math.max(0, mesAtual.diasNoMes - mesAtual.diaHoje);
-  const diasRestantesEfetivos = Math.min(diasRestantesNoPlano, diasRestantesNoCalendario);
+  const diasRestantesBase = Math.min(diasRestantesNoPlano, diasRestantesNoCalendario);
+  const maxFolgasParaTrabalhar = getMaxFolgasParaTrabalhar(diasTrabalho, diasJaTrabalhados);
+  const folgasParaTrabalhar = maxFolgasParaTrabalhar > 0
+    ? Math.min(Math.max(0, fromAnswers.folgasParaTrabalhar ?? 0), maxFolgasParaTrabalhar)
+    : 0;
+  const diasRestantesEfetivos = diasRestantesBase + folgasParaTrabalhar;
 
   const totalTrabalhoProjetado = diasJaTrabalhados + diasRestantesEfetivos;
   const diasAbaixoDoPlano = Math.max(0, diasTrabalho - totalTrabalhoProjetado);
@@ -434,6 +458,7 @@ function calculate() {
   return {
     faltaGanhar,
     folgas,
+    folgasParaTrabalhar,
     diasJaTrabalhados,
     diasTrabalho,
     diasRestantesCalendario: diasRestantesNoCalendario,
@@ -447,8 +472,397 @@ function calculate() {
   };
 }
 
-function showResults() {
+/* --- Textos dos resultados --- */
+
+function formatFolga(qtd) {
+  return `${qtd} folga${qtd !== 1 ? 's' : ''}`;
+}
+
+function buildFolgasUsoSpan(qtd, capitalize = false) {
+  const prefix = capitalize ? 'Usando' : 'usando';
+  return `<span class="folgas-uso-destaque">${prefix} <strong>${formatFolga(qtd)}</strong> para trabalhar.</span>`;
+}
+
+function buildMensagemDias(result) {
+  const diasRestantes = result.diasRestantesCalendario;
+  const folgasTrabalho = result.folgasParaTrabalhar || 0;
+  const folgasRestantes = Math.max(0, result.folgas.folgasRestantesNoPlano - folgasTrabalho);
+  const base = `Restam <strong>${formatDias(diasRestantes)}</strong>`;
+
+  if (folgasTrabalho > 0 && folgasRestantes > 0) {
+    const disponivel = folgasRestantes === 1 ? 'disponível' : 'disponíveis';
+    return `${base}, ${buildFolgasUsoSpan(folgasTrabalho)}, com <strong>${formatFolga(folgasRestantes)}</strong> ${disponivel}.`;
+  }
+
+  if (folgasTrabalho > 0) {
+    return `${base}, ${buildFolgasUsoSpan(folgasTrabalho)} Sem folgas disponíveis.`;
+  }
+
+  if (folgasRestantes > 0) {
+    const disponivel = folgasRestantes === 1 ? 'disponível' : 'disponíveis';
+    return `${base}, com <strong>${formatFolga(folgasRestantes)}</strong> ${disponivel}.`;
+  }
+
+  return `${base} de trabalho sem folgas.`;
+}
+
+function buildFolgouAMaisAlerta(dias, comAumentoMeta = false) {
+  let msg = `Você folgou <span class="alerta-destaque"><strong>${formatDias(dias)}</strong> a mais</span> do que seu plano permite.`;
+  if (comAumentoMeta) {
+    msg += ' A meta diária <span class="alerta-destaque"><strong>irá aumentar</strong></span>.';
+  }
+  return msg;
+}
+
+function buildAlertaAmarelo(result) {
+  const { folgas, planoNaoCabeNoMes, diasAbaixoDoPlano } = result;
+  const alertas = [];
+
+  if (folgas.situacao === 'dados_inconsistentes') {
+    alertas.push('Os dias já trabalhados não podem ser maiores que o dia de hoje no calendário.');
+  }
+
+  if (folgas.situacao === 'folgou_sem_direito' && !planoNaoCabeNoMes) {
+    alertas.push(buildFolgouAMaisAlerta(folgas.folgasUsadas));
+  }
+
+  if (folgas.situacao === 'folgou_alem_do_plano' && !planoNaoCabeNoMes) {
+    alertas.push(buildFolgouAMaisAlerta(folgas.folgasExcedentes));
+  }
+
+  if (planoNaoCabeNoMes) {
+    alertas.push(buildFolgouAMaisAlerta(diasAbaixoDoPlano, true));
+  }
+
+  return alertas;
+}
+
+function getFolgasExcesso(result) {
+  const { folgas, planoNaoCabeNoMes, diasAbaixoDoPlano } = result;
+
+  if (folgas.situacao === 'folgou_sem_direito') {
+    return folgas.folgasUsadas;
+  }
+  if (folgas.situacao === 'folgou_alem_do_plano') {
+    return folgas.folgasExcedentes;
+  }
+  if (planoNaoCabeNoMes) {
+    return diasAbaixoDoPlano;
+  }
+  return folgas.folgasExcedentes;
+}
+
+/* --- Histórico (localStorage) --- */
+
+function getSnapshotFromEntry(entry) {
+  if (entry.snapshot) return entry.snapshot;
+  const saved = new Date(entry.savedAt);
+  return {
+    diaHoje: saved.getDate(),
+    mes: saved.getMonth(),
+    ano: saved.getFullYear(),
+  };
+}
+
+function isSameMonthAsToday(snapshot) {
+  return snapshot.mes === mesAtual.mes && snapshot.ano === mesAtual.ano;
+}
+
+function getProjectedAnswers(entry) {
+  const snapshot = getSnapshotFromEntry(entry);
+  if (!isSameMonthAsToday(snapshot)) {
+    return null;
+  }
+
+  const { answers } = entry;
+  const folgasUsadasNoSnapshot = Math.max(0, snapshot.diaHoje - answers.diasJaTrabalhados);
+  const projectedDiasJaTrabalhados = Math.max(0, mesAtual.diaHoje - folgasUsadasNoSnapshot);
+
+  return {
+    ...answers,
+    diasJaTrabalhados: Math.min(projectedDiasJaTrabalhados, answers.diasTrabalho),
+  };
+}
+
+function buildHistoryDisplayLines(entry) {
+  const projectedAnswers = getProjectedAnswers(entry);
+  if (!projectedAnswers) {
+    return {
+      diasText: null,
+      folgasStatusText: `Registro de ${entry.monthLabel}.`,
+      isWarning: false,
+    };
+  }
+
+  return buildHistoryFolgasLine(calculate(projectedAnswers));
+}
+
+function buildHistoryFolgasLine(result) {
+  const diasText = `Restam <strong>${formatDias(result.diasRestantesCalendario)}</strong> até acabar o mês.`;
+  const excesso = getFolgasExcesso(result);
+  const folgasTrabalho = result.folgasParaTrabalhar || 0;
+  const folgasRestantes = Math.max(0, result.folgas.folgasRestantesNoPlano - folgasTrabalho);
+  const folgasUsoText = folgasTrabalho > 0 ? buildFolgasUsoSpan(folgasTrabalho, true) : null;
+
+  if (excesso > 0) {
+    return {
+      diasText,
+      folgasUsoText,
+      folgasStatusText: `Você folgou <strong>${formatDias(excesso)}</strong> a mais.`,
+      isWarning: true,
+    };
+  }
+
+  if (folgasRestantes > 0) {
+    return {
+      diasText,
+      folgasUsoText,
+      folgasStatusText: `Com <strong>${formatFolga(folgasRestantes)}</strong> disponíveis.`,
+      isSuccess: true,
+    };
+  }
+
+  return {
+    diasText,
+    folgasUsoText,
+    folgasStatusText: 'Sem folgas disponíveis.',
+    isNeutral: true,
+  };
+}
+
+function getValorDiarioLabel(result) {
+  if (result.metaAtingida) {
+    return 'Meta atingida! 🎉';
+  }
+  if (result.diasRestantesEfetivos === 0 && result.faltaGanhar > 0) {
+    return 'Sem dias restantes no mês';
+  }
+  if (result.diasRestantesEfetivos === 0) {
+    return 'Sem dias disponíveis';
+  }
+  return formatCurrency(result.valorDiario);
+}
+
+function getHistoryFolgasStatusClass(folgas) {
+  if (folgas.isWarning) return ' history-item-folgas--warning';
+  if (folgas.isSuccess) return ' history-item-folgas--success';
+  if (folgas.isNeutral) return ' history-item-folgas--neutral';
+  return '';
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+}
+
+function formatHistoryDate(isoString) {
+  const date = new Date(isoString);
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function addToHistory(result) {
+  const entry = {
+    id: Date.now(),
+    savedAt: new Date().toISOString(),
+    monthLabel: `${mesAtual.nome} de ${mesAtual.ano}`,
+    snapshot: {
+      diaHoje: mesAtual.diaHoje,
+      mes: mesAtual.mes,
+      ano: mesAtual.ano,
+    },
+    answers: { ...answers },
+    result: {
+      faltaGanhar: result.faltaGanhar,
+      valorDiario: result.valorDiario,
+      metaAtingida: result.metaAtingida,
+      valorDiarioLabel: getValorDiarioLabel(result),
+    },
+  };
+
+  const history = loadHistory().filter((item) => item.id !== entry.id);
+  history.unshift(entry);
+  saveHistory(history.slice(0, MAX_HISTORY));
+  renderHistory();
+}
+
+function setHistoryOpen(open) {
+  historyOpen = open;
+  dom.historyCard.hidden = !open || loadHistory().length === 0;
+
+  const label = open ? 'Ocultar Histórico' : 'Ver Histórico';
+  dom.btnVerHistorico.textContent = label;
+}
+
+function toggleHistory() {
+  if (loadHistory().length === 0) return;
+  setHistoryOpen(!historyOpen);
+  if (historyOpen) {
+    dom.historyCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function buildHistoryFolgasLinesHtml(folgas) {
+  let html = '';
+
+  if (folgas.diasText) {
+    html += `<p class="history-item-folgas">${folgas.diasText}</p>`;
+  }
+
+  if (folgas.folgasUsoText) {
+    html += `<p class="history-item-folgas history-item-folgas--uso">${folgas.folgasUsoText}</p>`;
+  }
+
+  const statusText = folgas.folgasStatusText || folgas.folgasText;
+  if (statusText) {
+    html += `<p class="history-item-folgas${getHistoryFolgasStatusClass(folgas)}">${statusText}</p>`;
+  }
+
+  return html;
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  const hasHistory = history.length > 0;
+
+  dom.btnVerHistorico.hidden = !hasHistory;
+
+  if (!hasHistory) {
+    setHistoryOpen(false);
+    dom.historyList.innerHTML = '';
+    return;
+  }
+
+  dom.historyList.innerHTML = history
+    .map((entry) => {
+      const valorClass = entry.result.metaAtingida ? 'history-item-value history-item-value--success' : 'history-item-value';
+      const folgas = buildHistoryDisplayLines(entry);
+      const folgasLines = buildHistoryFolgasLinesHtml(folgas);
+
+      return `
+        <li class="history-item">
+          <div class="history-item-main">
+            <p class="history-item-date">${formatHistoryDate(entry.savedAt)} · ${entry.monthLabel}</p>
+            <p class="${valorClass}">${entry.result.valorDiarioLabel}</p>
+            <p class="history-item-meta">Meta ${formatCurrency(entry.answers.metaMensal)} · <span class="history-item-falta">Falta ${formatCurrency(entry.result.faltaGanhar)}</span></p>
+            ${folgasLines}
+          </div>
+          <button type="button" class="btn btn--ghost history-use-btn" data-history-id="${entry.id}">Usar de novo</button>
+        </li>
+      `;
+    })
+    .join('');
+
+  dom.historyList.querySelectorAll('.history-use-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const entry = history.find((item) => item.id === Number(btn.dataset.historyId));
+      if (entry) applyHistoryEntry(entry);
+    });
+  });
+
+  setHistoryOpen(historyOpen);
+}
+
+/* --- Pergunta 5: folgas para trabalhar (nos resultados) --- */
+
+function showFolgasTrabalhoError(message) {
+  dom.folgasTrabalhoError.textContent = message;
+  dom.folgasTrabalhoError.hidden = !message;
+}
+
+function renderFolgasTrabalhoInput() {
+  const needsFolgasInput = shouldAskFolgasParaTrabalhar();
+  const folgasPending = needsFolgasInput && answers.folgasParaTrabalhar == null;
+
+  dom.respostaFolgas.hidden = !folgasPending;
+  dom.resposta3Wrap.hidden = folgasPending;
+
+  if (!folgasPending) {
+    showFolgasTrabalhoError('');
+    return;
+  }
+
+  const max = getMaxFolgasParaTrabalhar(answers.diasTrabalho, answers.diasJaTrabalhados);
+  const folgas = analyzeFolgas(answers.diasTrabalho, answers.diasJaTrabalhados);
+  dom.folgasParaTrabalharInput.max = max;
+  dom.folgasTrabalhoHint.textContent = `${formatFolga(folgas.folgasRestantesNoPlano)} disponíveis.`;
+  dom.folgasParaTrabalharInput.value = '';
+}
+
+function applyFolgasParaTrabalhar() {
+  const max = getMaxFolgasParaTrabalhar(answers.diasTrabalho, answers.diasJaTrabalhados);
+  const raw = dom.folgasParaTrabalharInput.value.trim();
+
+  if (raw === '') {
+    showFolgasTrabalhoError('Informe quantos dias de folga quer usar (ou 0).');
+    return;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > max) {
+    showFolgasTrabalhoError(`Informe um número inteiro entre 0 e ${max}.`);
+    return;
+  }
+
+  answers.folgasParaTrabalhar = value;
+  showFolgasTrabalhoError('');
+  showResults({ keepFolgas: true });
+}
+
+function applyHistoryEntry(entry) {
+  Object.assign(answers, {
+    metaMensal: null,
+    diasTrabalho: null,
+    diasJaTrabalhados: null,
+    lucroJaObtido: null,
+    folgasParaTrabalhar: null,
+    ...entry.answers,
+  });
+
+  if (answers.folgasParaTrabalhar == null && !shouldAskFolgasParaTrabalhar()) {
+    answers.folgasParaTrabalhar = 0;
+  }
+
+  setHistoryOpen(false);
+  currentStepIndex = steps.length;
+  showResults({ fromHistory: true, keepFolgas: true });
+}
+
+function clearHistory() {
+  saveHistory([]);
+  setHistoryOpen(false);
+  renderHistory();
+}
+
+/* --- Tela de resultados --- */
+
+function showResults(options = {}) {
+  setHistoryOpen(false);
+
+  if (!options.keepFolgas && !options.fromHistory) {
+    if (shouldAskFolgasParaTrabalhar()) {
+      answers.folgasParaTrabalhar = null;
+    } else {
+      answers.folgasParaTrabalhar = 0;
+    }
+  }
+
   const result = calculate();
+  const needsFolgasInput = shouldAskFolgasParaTrabalhar();
+  const folgasPending = needsFolgasInput && answers.folgasParaTrabalhar == null;
 
   dom.questionsPanel.hidden = true;
   dom.resultsCard.hidden = false;
@@ -456,6 +870,7 @@ function showResults() {
 
   dom.resposta1Valor.textContent = formatCurrency(result.faltaGanhar);
   dom.resposta2Texto.innerHTML = buildMensagemDias(result);
+  renderFolgasTrabalhoInput();
 
   const alertas = buildAlertaAmarelo(result);
 
@@ -466,9 +881,22 @@ function showResults() {
     dom.respostaAlerta.hidden = true;
   }
 
+  const valorDiarioLabel = getValorDiarioLabel(result);
+
+  dom.resposta3Texto.hidden = false;
+
   if (result.metaAtingida) {
-    dom.resposta3Valor.textContent = 'Você já atingiu a meta! 🎉';
+    dom.resposta3Valor.textContent = valorDiarioLabel;
     dom.resposta3Valor.classList.add('result-value--success');
+  } else if (
+    needsFolgasInput &&
+    answers.folgasParaTrabalhar === 0 &&
+    result.diasRestantesEfetivos === 0 &&
+    result.faltaGanhar > 0
+  ) {
+    dom.resposta3Texto.hidden = true;
+    dom.resposta3Valor.textContent = 'Você optou por não usar folgas. Não há dias de trabalho restantes para calcular a meta diária.';
+    dom.resposta3Valor.classList.remove('result-value--success');
   } else if (result.diasRestantesEfetivos === 0 && result.faltaGanhar > 0) {
     dom.resposta3Valor.textContent = 'Não há mais dias no calendário para trabalhar e a meta ainda não foi atingida.';
     dom.resposta3Valor.classList.remove('result-value--success');
@@ -476,10 +904,16 @@ function showResults() {
     dom.resposta3Valor.textContent = 'Não há mais dias disponíveis para trabalhar neste mês.';
     dom.resposta3Valor.classList.remove('result-value--success');
   } else {
-    dom.resposta3Valor.textContent = formatCurrency(result.valorDiario);
+    dom.resposta3Valor.textContent = valorDiarioLabel;
     dom.resposta3Valor.classList.remove('result-value--success');
   }
+
+  if (!options.fromHistory && !folgasPending) {
+    addToHistory(result);
+  }
 }
+
+/* --- Navegação --- */
 
 function goNext() {
   if (!validateCurrentStep()) return;
@@ -506,14 +940,19 @@ function restart() {
     diasTrabalho: null,
     diasJaTrabalhados: null,
     lucroJaObtido: null,
+    folgasParaTrabalhar: null,
   });
 
   currentStepIndex = 0;
   dom.questionsPanel.hidden = false;
   dom.resultsCard.hidden = true;
+  setHistoryOpen(false);
   dom.headerSubtitle.textContent = 'Responda as perguntas para calcular sua meta diária.';
   dom.resposta3Valor.classList.remove('result-value--success');
   dom.respostaAlerta.hidden = true;
+  dom.respostaFolgas.hidden = true;
+  dom.resposta3Wrap.hidden = false;
+  showFolgasTrabalhoError('');
   showError('');
   renderStep();
 }
@@ -522,9 +961,18 @@ function initMonthInfo() {
   dom.monthInfo.textContent = `📅 ${mesAtual.nome} de ${mesAtual.ano} · ${mesAtual.diasNoMes} dias`;
 }
 
+/* --- Inicialização --- */
+
 dom.btnNext.addEventListener('click', goNext);
 dom.btnBack.addEventListener('click', goBack);
 dom.btnRestart.addEventListener('click', restart);
+dom.btnClearHistory.addEventListener('click', clearHistory);
+dom.btnVerHistorico.addEventListener('click', toggleHistory);
+dom.btnCalcularFolgas.addEventListener('click', applyFolgasParaTrabalhar);
+dom.folgasParaTrabalharInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') applyFolgasParaTrabalhar();
+});
 
 initMonthInfo();
+renderHistory();
 renderStep();

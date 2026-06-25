@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <!-- Fundo decorativo -->
   <div class="bg-shapes" aria-hidden="true">
     <div class="shape shape-1"></div>
     <div class="shape shape-2"></div>
@@ -17,6 +19,8 @@
   </div>
 
   <main class="container">
+
+    <!-- Cabeçalho -->
     <header class="header">
       <div class="logo">💰</div>
       <h1>Cálculo de Metas Diárias</h1>
@@ -24,6 +28,7 @@
       <p class="month-badge" id="month-info"></p>
     </header>
 
+    <!-- Perguntas 1 a 4 (wizard) -->
     <div id="questions-panel">
       <div class="progress-wrap" id="progress-wrap">
         <div class="progress-bar">
@@ -44,38 +49,63 @@
       </section>
     </div>
 
+    <!-- Resultados -->
     <section class="card results-card" id="results-card" hidden>
       <h2 class="card-title">Seu resultado</h2>
 
+      <!-- Resposta 1: valor a obter -->
       <article class="result-answer">
         <p class="result-answer-label">Resposta 1</p>
-        <p class="result-answer-text">
-          Valor ainda a obter é de:
-        </p>
+        <p class="result-answer-text">Valor ainda a obter é de:</p>
         <p class="result-answer-value" id="resposta-1-valor">R$ 0,00</p>
       </article>
 
+      <!-- Resposta 2: dias e folgas -->
       <article class="result-answer">
         <p class="result-answer-label">Resposta 2</p>
         <p class="result-answer-text" id="resposta-2-texto"></p>
       </article>
 
+      <!-- Alerta de atenção (folgas excedentes) -->
       <article class="result-answer result-answer--warning" id="resposta-alerta" hidden>
         <p class="result-answer-label">Atenção</p>
         <p class="result-answer-text" id="resposta-alerta-texto"></p>
       </article>
 
-      <article class="result-answer result-answer--highlight">
+      <!-- Pergunta 5: usar folgas para trabalhar -->
+      <article class="result-answer result-answer--warning" id="resposta-folgas" hidden>
+        <p class="result-answer-label">Pergunta 5</p>
+        <p class="result-answer-text">Você já usou todos os dias planejados de trabalho, mas <span class="folgas-destaque">ainda tem folgas.</span></p>
+        <p class="result-answer-text folgas-trabalho-question">Quantos dias de folga você quer <span class="folgas-destaque">abrir mão</span> para trabalhar?</p>
+        <input type="number" id="folgas-para-trabalhar-input" class="folgas-trabalho-input" min="0" step="1" placeholder="0" inputmode="numeric">
+        <button type="button" class="btn btn--warning btn--full" id="btn-calcular-folgas">Calcular</button>
+        <p class="folgas-trabalho-hint" id="folgas-trabalho-hint"></p>
+        <p class="error-msg folgas-trabalho-error" id="folgas-trabalho-error" role="alert" hidden></p>
+      </article>
+
+      <!-- Resposta 3: meta diária -->
+      <article class="result-answer result-answer--highlight" id="resposta-3-wrap">
         <p class="result-answer-label">Resposta 3</p>
-        <p class="result-answer-text">
-          O valor diário para bater a meta é de:
-        </p>
+        <p class="result-answer-text" id="resposta-3-texto">O valor diário para bater a meta é de:</p>
         <p class="result-answer-value" id="resposta-3-valor">R$ 0,00</p>
       </article>
 
       <button type="button" class="btn btn--ghost btn--full" id="btn-restart">Refazer perguntas</button>
     </section>
 
+    <!-- Botão e painel do histórico -->
+    <button type="button" class="btn btn--ghost btn--full btn--history" id="btn-ver-historico" hidden>Ver Histórico</button>
+
+    <section class="card history-card" id="history-card" hidden>
+      <div class="history-header">
+        <h2 class="card-title history-title">Seus últimos cálculos</h2>
+        <button type="button" class="history-clear" id="btn-clear-history">Limpar</button>
+      </div>
+      <p class="history-hint">Salvo neste navegador · até 5 registros</p>
+      <ul class="history-list" id="history-list"></ul>
+    </section>
+
+    <!-- Rodapé -->
     <footer class="footer">
       <p>Planeje suas metas com base nos dias que vai trabalhar.</p>
       <p class="footer-credit">Created by Anathiare R. Santos</p>
