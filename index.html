@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cálculo de Metas Diárias</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg-shapes" aria-hidden="true">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+  </div>
+
+  <main class="container">
+    <header class="header">
+      <div class="logo">💰</div>
+      <h1>Cálculo de Metas Diárias</h1>
+      <p class="subtitle" id="header-subtitle">Responda as perguntas para calcular sua meta diária.</p>
+      <p class="month-badge" id="month-info"></p>
+    </header>
+
+    <div id="questions-panel">
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <span class="progress-text" id="progress-text">Pergunta 1 de 4</span>
+      </div>
+
+      <section class="card wizard-card" id="wizard-card">
+        <div class="step-content" id="step-content"></div>
+
+        <p class="error-msg" id="error-msg" role="alert" hidden></p>
+
+        <div class="nav-buttons" id="nav-buttons">
+          <button type="button" class="btn btn--ghost" id="btn-back" hidden>Voltar</button>
+          <button type="button" class="btn btn--primary" id="btn-next">Próxima</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="card results-card" id="results-card" hidden>
+      <h2 class="card-title">Seu resultado</h2>
+
+      <article class="result-answer">
+        <p class="result-answer-label">Resposta 1</p>
+        <p class="result-answer-text">
+          Valor ainda a obter é de:
+        </p>
+        <p class="result-answer-value" id="resposta-1-valor">R$ 0,00</p>
+      </article>
+
+      <article class="result-answer">
+        <p class="result-answer-label">Resposta 2</p>
+        <p class="result-answer-text" id="resposta-2-texto"></p>
+      </article>
+
+      <article class="result-answer result-answer--warning" id="resposta-alerta" hidden>
+        <p class="result-answer-label">Atenção</p>
+        <p class="result-answer-text" id="resposta-alerta-texto"></p>
+      </article>
+
+      <article class="result-answer result-answer--highlight">
+        <p class="result-answer-label">Resposta 3</p>
+        <p class="result-answer-text">
+          O valor diário para bater a meta é de:
+        </p>
+        <p class="result-answer-value" id="resposta-3-valor">R$ 0,00</p>
+      </article>
+
+      <button type="button" class="btn btn--ghost btn--full" id="btn-restart">Refazer perguntas</button>
+    </section>
+
+    <footer class="footer">
+      <p>Planeje suas metas com base nos dias que vai trabalhar.</p>
+      <p class="footer-credit">Created by Anathiare R. Santos</p>
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
