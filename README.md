@@ -23,7 +23,7 @@ Tudo isso considerando o calendário do mês atual, suas folgas e se você está
 
 Acesse a página publicada no GitHub Pages:
 
-**[Abrir Calculo de Metas Diarias](https://calculo-metas-diarias.js.org/)**
+**[Abrir Calculo de Metas Diarias](https://metasdiarias.js.org/)**
 
 ### No computador
 
